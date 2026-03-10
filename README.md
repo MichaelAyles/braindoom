@@ -2,6 +2,10 @@
 
 **[braindoom.mikeayles.com](https://braindoom.mikeayles.com)**
 
+**[Read the full writeup](https://www.mikeayles.com/blog/its-just-weights/)** — the long-form argument, with the live demo embedded.
+
+![Screenshot](public/screenshot.png)
+
 A tiny neural network learns the same behaviour as the Cortical Labs CL1 DOOM demo. In your browser. In seconds.
 
 ## What is this?
@@ -35,11 +39,11 @@ Open `http://localhost:5173`.
 
 ## How it works
 
-The agent sits in a 2D arena with enemies spawning at random positions. It receives the same three signals the CL1 biological neurons receive (encoded enemy bearing, distance, visibility) and must learn to turn toward the enemy and shoot. Training uses PPO-style policy gradient with symmetric data augmentation, learning rate decay, and a best-checkpoint ratchet to prevent catastrophic forgetting.
+The agent sits in a 2D arena with enemies spawning at random positions. It receives the same three decision-relevant variables that the CL1 encoding pipeline distils from game state (enemy bearing, distance, visibility) and must learn to turn toward the enemy and shoot. Training uses policy gradient with symmetric data augmentation, learning rate decay, and a best-checkpoint ratchet to prevent catastrophic forgetting.
 
 ## Blog post
 
-The accompanying blog post lives in `blog/index.mdx` with JSX components in `blog/components/`.
+**[Read the full writeup on mikeayles.com](https://www.mikeayles.com/blog/its-just-weights/)** — source lives in `blog/index.mdx` with JSX components in `blog/components/`.
 
 ## Build
 
@@ -51,3 +55,7 @@ npm run preview  # preview production build
 ## Deployment
 
 Deployed to GitHub Pages at [braindoom.mikeayles.com](https://braindoom.mikeayles.com) via GitHub Actions on push to main.
+
+## License
+
+[MIT](LICENSE)
