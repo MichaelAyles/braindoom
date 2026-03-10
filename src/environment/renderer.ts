@@ -18,6 +18,7 @@ const THEMES = {
     agentLabel: 'agent',
     killLabel: 'kills',
     hpLabel: 'hp',
+    ammoLabel: 'ammo',
   },
   flower: {
     agent: '#22c55e',
@@ -32,6 +33,7 @@ const THEMES = {
     agentLabel: 'gardener',
     killLabel: 'watered',
     hpLabel: 'energy',
+    ammoLabel: 'water',
   },
 };
 
@@ -189,7 +191,7 @@ export class ArenaRenderer {
     ctx.fillText(`episode: ${episode}`, 8, 16);
     ctx.fillText(`${t.killLabel}: ${state.killCount}`, 8, 30);
     ctx.fillText(`step: ${state.step}`, 8, 44);
-    ctx.fillText(`ammo: ${state.agentAmmo}`, 8, 58);
+    ctx.fillText(`${t.ammoLabel}: ${state.agentAmmo}`, 8, 58);
     ctx.textAlign = 'right';
     ctx.fillText(`${t.hpLabel}: ${Math.max(0, Math.round(state.agentHP))}`, size - 8, 28);
   }

@@ -161,17 +161,26 @@ function init(): void {
   const logDiv = document.createElement('div');
   app.appendChild(logDiv);
 
-  // Renderers
+  // Renderers (default to flower theme)
   const arenaRenderer = new ArenaRenderer(arenaCanvas);
+  arenaRenderer.theme = 'flower';
   const netViz = new NetworkViz(netCanvas);
+  netViz.theme = 'flower';
   const rewardChart = new RewardChart(chartCanvas);
+  rewardChart.theme = 'flower';
   const annotations = new Annotations(annotDiv);
+  annotations.theme = 'flower';
   const trainingLog = new TrainingLog(logDiv);
+  trainingLog.theme = 'flower';
 
   const controls = new Controls(controlsDiv, (state) => {
     playing = state.playing;
     speed = state.speed;
     arenaRenderer.theme = state.theme;
+    netViz.theme = state.theme;
+    rewardChart.theme = state.theme;
+    trainingLog.theme = state.theme;
+    annotations.theme = state.theme;
 
     if (state.ablation !== ablation) {
       ablation = state.ablation;

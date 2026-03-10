@@ -8,7 +8,6 @@ const MOVE_STEP = 4;
 const KILL_ANGLE = Math.PI / 18; // ±10 degrees
 const KILL_RANGE = 180;
 const FOV = Math.PI / 2; // 90 degree field of view
-const MAX_STEPS = 200;
 const AGENT_MAX_HP = 100;
 const AGENT_START_AMMO = 8;
 const AMMO_PER_KILL = 4;

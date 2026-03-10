@@ -1,3 +1,5 @@
+import { ThemeMode } from '../environment/types';
+
 export interface LogEntry {
   episode: number;
   reward: number;
@@ -13,19 +15,25 @@ export interface LogEntry {
   probs: number[];
 }
 
-const COLUMNS: { key: keyof LogEntry | 'probs_fmt'; label: string; fmt: (e: LogEntry) => string }[] = [
-  { key: 'episode', label: 'ep', fmt: e => String(e.episode) },
-  { key: 'reward', label: 'reward', fmt: e => e.reward.toFixed(1) },
-  { key: 'kills', label: 'kills', fmt: e => String(e.kills) },
-  { key: 'steps', label: 'steps', fmt: e => String(e.steps) },
-  { key: 'avgPeakHP', label: 'avg50 HP', fmt: e => e.avgPeakHP.toFixed(0) },
-  { key: 'avgPeakAmmo', label: 'avg50 ammo', fmt: e => e.avgPeakAmmo.toFixed(1) },
-  { key: 'avgSteps', label: 'avg50 steps', fmt: e => e.avgSteps.toFixed(0) },
-  { key: 'actionsL', label: 'L%', fmt: e => e.actionsL + '%' },
-  { key: 'actionsR', label: 'R%', fmt: e => e.actionsR + '%' },
-  { key: 'actionsS', label: 'S%', fmt: e => e.actionsS + '%' },
-  { key: 'actionsF', label: 'F%', fmt: e => e.actionsF + '%' },
-  { key: 'probs_fmt', label: 'probs', fmt: e => e.probs.map(p => p.toFixed(2)).join(', ') },
+interface Column {
+  key: keyof LogEntry | 'probs_fmt';
+  label: (theme: ThemeMode) => string;
+  fmt: (e: LogEntry) => string;
+}
+
+const COLUMNS: Column[] = [
+  { key: 'episode', label: () => 'ep', fmt: e => String(e.episode) },
+  { key: 'reward', label: () => 'reward', fmt: e => e.reward.toFixed(1) },
+  { key: 'kills', label: t => t === 'flower' ? 'watered' : 'kills', fmt: e => String(e.kills) },
+  { key: 'steps', label: () => 'steps', fmt: e => String(e.steps) },
+  { key: 'avgPeakHP', label: t => t === 'flower' ? 'avg50 energy' : 'avg50 HP', fmt: e => e.avgPeakHP.toFixed(0) },
+  { key: 'avgPeakAmmo', label: t => t === 'flower' ? 'avg50 water' : 'avg50 ammo', fmt: e => e.avgPeakAmmo.toFixed(1) },
+  { key: 'avgSteps', label: () => 'avg50 steps', fmt: e => e.avgSteps.toFixed(0) },
+  { key: 'actionsL', label: () => 'L%', fmt: e => e.actionsL + '%' },
+  { key: 'actionsR', label: () => 'R%', fmt: e => e.actionsR + '%' },
+  { key: 'actionsS', label: () => 'S%', fmt: e => e.actionsS + '%' },
+  { key: 'actionsF', label: () => 'F%', fmt: e => e.actionsF + '%' },
+  { key: 'probs_fmt', label: () => 'probs', fmt: e => e.probs.map(p => p.toFixed(2)).join(', ') },
 ];
 
 const CSV_HEADERS = 'episode,reward,kills,steps,avgPeakHP,avgPeakAmmo,avgSteps,L%,R%,S%,F%,probL,probR,probS,probF';
@@ -33,9 +41,17 @@ const CSV_HEADERS = 'episode,reward,kills,steps,avgPeakHP,avgPeakAmmo,avgSteps,L
 export class TrainingLog {
   private container: HTMLElement;
   private tbody: HTMLTableSectionElement;
+  private headerCells: HTMLTableCellElement[] = [];
   private entries: LogEntry[] = [];
   private copyBtn: HTMLButtonElement;
   private csvBtn: HTMLButtonElement;
+  private _theme: ThemeMode = 'doom';
+
+  get theme(): ThemeMode { return this._theme; }
+  set theme(t: ThemeMode) {
+    this._theme = t;
+    this.updateHeaders();
+  }
 
   constructor(parent: HTMLElement) {
     this.container = document.createElement('div');
@@ -77,13 +93,14 @@ export class TrainingLog {
     const headRow = document.createElement('tr');
     for (const col of COLUMNS) {
       const th = document.createElement('th');
-      th.textContent = col.label;
+      th.textContent = col.label(this._theme);
       th.style.cssText = `
         padding: 4px 6px; text-align: right; color: #666;
         border-bottom: 1px solid #222; position: sticky; top: 0;
         background: #0d0d0d; white-space: nowrap;
       `;
       headRow.appendChild(th);
+      this.headerCells.push(th);
     }
     thead.appendChild(headRow);
     table.appendChild(thead);
@@ -94,6 +111,12 @@ export class TrainingLog {
     wrapper.appendChild(table);
     this.container.appendChild(wrapper);
     parent.appendChild(this.container);
+  }
+
+  private updateHeaders(): void {
+    for (let i = 0; i < COLUMNS.length; i++) {
+      this.headerCells[i].textContent = COLUMNS[i].label(this._theme);
+    }
   }
 
   private makeButton(text: string): HTMLButtonElement {

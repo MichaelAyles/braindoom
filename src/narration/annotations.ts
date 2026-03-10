@@ -1,6 +1,8 @@
+import { ThemeMode } from '../environment/types';
+
 interface Milestone {
   trigger: (episode: number, avgReward: number, killRate: number) => boolean;
-  text: string;
+  text: (theme: ThemeMode) => string;
   fired: boolean;
 }
 
@@ -8,6 +10,7 @@ export class Annotations {
   private container: HTMLElement;
   private milestones: Milestone[];
   private inReplay = false;
+  theme: ThemeMode = 'doom';
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -20,32 +23,42 @@ export class Annotations {
     this.milestones = [
       {
         trigger: (ep) => ep === 1,
-        text: 'Episode 1. Weights are random, actions are random. This is the starting condition, equivalent to the CL1 ablation baseline where decoder output is randomised.',
+        text: () => 'Episode 1. Weights are random, actions are random. This is the starting condition, equivalent to the CL1 ablation baseline where decoder output is randomised.',
         fired: false,
       },
       {
         trigger: (ep, avg) => ep >= 5 && avg > -15,
-        text: 'The angle-to-turn weights are differentiating. The network is learning "if enemy is left, turn left." The CL1 neurons took days of continuous stimulation to reach this point.',
+        text: (t) => t === 'flower'
+          ? 'The angle-to-turn weights are differentiating. The network is learning "if flower is left, turn left." The CL1 neurons took days of continuous stimulation to reach this point.'
+          : 'The angle-to-turn weights are differentiating. The network is learning "if enemy is left, turn left." The CL1 neurons took days of continuous stimulation to reach this point.',
         fired: false,
       },
       {
         trigger: (ep, avg) => ep >= 15 && avg > -5,
-        text: 'Orientation is reliable now. The agent turns toward the enemy consistently. Watch the red connections from "angle" to "left" and "right" in the network diagram.',
+        text: (t) => t === 'flower'
+          ? 'Orientation is reliable now. The gardener turns toward the flower consistently. Watch the connections from "angle" to "left" and "right" in the network diagram.'
+          : 'Orientation is reliable now. The agent turns toward the enemy consistently. Watch the connections from "angle" to "left" and "right" in the network diagram.',
         fired: false,
       },
       {
         trigger: (ep, _avg, killRate) => ep >= 10 && killRate > 0.5,
-        text: 'The shoot weights are engaging. The agent is learning when to fire. 132 parameters, a few seconds of compute.',
+        text: (t) => t === 'flower'
+          ? 'The spray weights are engaging. The gardener is learning when to water. 132 parameters, a few seconds of compute.'
+          : 'The shoot weights are engaging. The agent is learning when to fire. 132 parameters, a few seconds of compute.',
         fired: false,
       },
       {
         trigger: (ep, avg) => ep >= 30 && avg > 0,
-        text: 'Full behaviour acquired. Turn toward target, act when aimed. This is the same capability the CL1 demo shows, reproduced with a network you can see through entirely.',
+        text: (t) => t === 'flower'
+          ? 'Full behaviour acquired. Turn toward flower, spray when aimed. This is the same capability the CL1 demo shows, reproduced with a network you can see through entirely.'
+          : 'Full behaviour acquired. Turn toward target, shoot when aimed. This is the same capability the CL1 demo shows, reproduced with a network you can see through entirely.',
         fired: false,
       },
       {
         trigger: (ep, avg) => ep >= 100 && avg > 5,
-        text: 'The network is efficient now. It rarely misses. Try the ablation toggle to see what happens when the weights are bypassed.',
+        text: (t) => t === 'flower'
+          ? 'The network is efficient now. It rarely misses a flower. Try the ablation toggle to see what happens when the weights are bypassed.'
+          : 'The network is efficient now. It rarely misses. Try the ablation toggle to see what happens when the weights are bypassed.',
         fired: false,
       },
     ];
@@ -56,7 +69,7 @@ export class Annotations {
     for (const m of this.milestones) {
       if (!m.fired && m.trigger(episode, avgReward, killRate)) {
         m.fired = true;
-        this.show(m.text);
+        this.show(m.text(this.theme));
       }
     }
   }

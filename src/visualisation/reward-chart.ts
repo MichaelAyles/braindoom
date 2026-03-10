@@ -1,3 +1,5 @@
+import { ThemeMode } from '../environment/types';
+
 export class RewardChart {
   private ctx: CanvasRenderingContext2D;
   private width: number;
@@ -11,6 +13,7 @@ export class RewardChart {
   private smoothedKills: number[] = [];
 
   private windowSize = 20;
+  theme: ThemeMode = 'doom';
 
   constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -165,7 +168,8 @@ export class RewardChart {
 
     // Kills
     ctx.fillStyle = '#3b82f6';
-    ctx.fillText(`kills/ep: ${lastKills.toFixed(1)}`, padding.left + 250, legendY);
+    const killLabel = this.theme === 'flower' ? 'watered/ep' : 'kills/ep';
+    ctx.fillText(`${killLabel}: ${lastKills.toFixed(1)}`, padding.left + 250, legendY);
 
     // X-axis
     ctx.fillStyle = '#444';

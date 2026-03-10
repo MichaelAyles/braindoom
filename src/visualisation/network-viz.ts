@@ -1,7 +1,11 @@
 import { Network } from '../network/network';
+import { ThemeMode } from '../environment/types';
 
 const INPUT_LABELS = ['angle', 'dist', 'visible'];
-const OUTPUT_LABELS = ['left', 'right', 'shoot', 'fwd'];
+const OUTPUT_LABELS: Record<ThemeMode, string[]> = {
+  doom: ['left', 'right', 'shoot', 'fwd'],
+  flower: ['left', 'right', 'spray', 'fwd'],
+};
 
 interface NodeInfo {
   layer: number; // 0=input, 1=hidden, 2=output
@@ -31,6 +35,7 @@ export class NetworkViz {
   // Weight history for selected node
   private weightHistories: Map<string, number[]> = new Map();
   private historyStep = 0;
+  theme: ThemeMode = 'doom';
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -236,7 +241,7 @@ export class NetworkViz {
       const isActive = focusNode?.layer === 2 && focusNode.index === k;
       this.drawNode(x, y, isActive ? nodeRadius + 2 : nodeRadius, '#f97316', prob);
       ctx.fillStyle = '#888';
-      ctx.fillText(`${OUTPUT_LABELS[k] || `o${k}`} ${(prob * 100).toFixed(0)}%`, x + 14, y);
+      ctx.fillText(`${OUTPUT_LABELS[this.theme][k] || `o${k}`} ${(prob * 100).toFixed(0)}%`, x + 14, y);
     }
 
     // Tooltip on hover
@@ -325,7 +330,7 @@ export class NetworkViz {
 
     // Header
     const nodeLabel = node.layer === 0 ? INPUT_LABELS[node.index] :
-                      node.layer === 2 ? OUTPUT_LABELS[node.index] :
+                      node.layer === 2 ? OUTPUT_LABELS[this.theme][node.index] :
                       `h${node.index}`;
     ctx.fillStyle = '#888';
     ctx.font = '10px "JetBrains Mono", "Fira Code", monospace';
@@ -422,7 +427,7 @@ export class NetworkViz {
       }
       weights.push({ label: 'bias', value: network.biasH[node.index] });
       for (let k = 0; k < network.config.outputSize; k++) {
-        weights.push({ label: `→${OUTPUT_LABELS[k]}`, value: network.weightsHO[k][node.index] });
+        weights.push({ label: `→${OUTPUT_LABELS[this.theme][k]}`, value: network.weightsHO[k][node.index] });
       }
     } else if (node.layer === 2) {
       // Output node: show incoming weights from hidden + bias
@@ -454,7 +459,7 @@ export class NetworkViz {
       for (let k = 0; k < 4; k++) {
         const key = `ho_${node.index}_${k}`;
         const vals = this.weightHistories.get(key);
-        if (vals) histories.push({ label: OUTPUT_LABELS[k], values: vals });
+        if (vals) histories.push({ label: OUTPUT_LABELS[this.theme][k], values: vals });
       }
     } else if (node.layer === 2) {
       for (let j = 0; j < 16; j++) {

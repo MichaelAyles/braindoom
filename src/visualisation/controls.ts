@@ -28,7 +28,7 @@ export class Controls {
     playing: true,
     speed: SPEEDS[DEFAULT_SPEED_INDEX].value,
     ablation: false,
-    theme: 'doom',
+    theme: 'flower',
     snapshotRequest: null,
   };
   private container: HTMLElement;
@@ -98,7 +98,7 @@ export class Controls {
       this.onChange(this.state);
     });
 
-    this.themeBtn = this.makeBtn('mode: doom', () => {
+    this.themeBtn = this.makeBtn('mode: flower', () => {
       this.state.theme = this.state.theme === 'doom' ? 'flower' : 'doom';
       this.themeBtn.textContent = `mode: ${this.state.theme}`;
       this.themeBtn.style.borderColor = this.state.theme === 'flower' ? '#22c55e' : '#333';
@@ -109,6 +109,10 @@ export class Controls {
     const resetBtn = this.makeBtn('reset', () => {
       this.container.dispatchEvent(new CustomEvent('reset'));
     });
+
+    // Apply initial flower theme styling
+    this.themeBtn.style.borderColor = '#22c55e';
+    this.themeBtn.style.color = '#22c55e';
 
     row.append(this.playBtn, this.speedSelect, this.ablationBtn, this.themeBtn, resetBtn);
 
