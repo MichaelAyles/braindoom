@@ -7,10 +7,11 @@ export class RewardChart {
 
   private rewards: number[] = [];
   private smoothedRewards: number[] = [];
-  private survivals: boolean[] = []; // true = survived, false = died
-  private smoothedSurvival: number[] = [];
+  private steps: number[] = []; // steps per episode (survival length)
+  private smoothedSteps: number[] = [];
   private kills: number[] = []; // kills per episode
   private smoothedKills: number[] = [];
+  private ablated: boolean[] = []; // was this episode run under ablation?
 
   private windowSize = 20;
   theme: ThemeMode = 'doom';
@@ -21,10 +22,11 @@ export class RewardChart {
     this.height = canvas.height;
   }
 
-  push(episodeReward: number, survived: boolean, killCount: number): void {
+  push(episodeReward: number, stepCount: number, killCount: number, isAblated = false): void {
     this.rewards.push(episodeReward);
-    this.survivals.push(survived);
+    this.steps.push(stepCount);
     this.kills.push(killCount);
+    this.ablated.push(isAblated);
 
     const start = Math.max(0, this.rewards.length - this.windowSize);
 
@@ -32,9 +34,9 @@ export class RewardChart {
     const rewardWindow = this.rewards.slice(start);
     this.smoothedRewards.push(rewardWindow.reduce((a, b) => a + b, 0) / rewardWindow.length);
 
-    // Smoothed survival rate
-    const survWindow = this.survivals.slice(start);
-    this.smoothedSurvival.push(survWindow.filter(s => s).length / survWindow.length);
+    // Smoothed steps per episode
+    const stepWindow = this.steps.slice(start);
+    this.smoothedSteps.push(stepWindow.reduce((a, b) => a + b, 0) / stepWindow.length);
 
     // Smoothed kills per episode
     const killWindow = this.kills.slice(start);
@@ -48,10 +50,11 @@ export class RewardChart {
   reset(): void {
     this.rewards = [];
     this.smoothedRewards = [];
-    this.survivals = [];
-    this.smoothedSurvival = [];
+    this.steps = [];
+    this.smoothedSteps = [];
     this.kills = [];
     this.smoothedKills = [];
+    this.ablated = [];
   }
 
   render(): void {
@@ -76,6 +79,36 @@ export class RewardChart {
 
     const toX = (i: number) => padding.left + (i / (len - 1)) * plotW;
 
+    // ---- Ablation overlay (red shaded regions) ----
+    let inAblation = false;
+    let ablationStart = 0;
+    for (let i = 0; i < len; i++) {
+      if (this.ablated[i] && !inAblation) {
+        inAblation = true;
+        ablationStart = i;
+      } else if (!this.ablated[i] && inAblation) {
+        inAblation = false;
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+        ctx.fillRect(toX(ablationStart), padding.top, toX(i) - toX(ablationStart), plotH);
+        // Top bar
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+        ctx.fillRect(toX(ablationStart), padding.top, toX(i) - toX(ablationStart), 2);
+      }
+    }
+    // Close trailing ablation region
+    if (inAblation) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+      ctx.fillRect(toX(ablationStart), padding.top, toX(len - 1) - toX(ablationStart), plotH);
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+      ctx.fillRect(toX(ablationStart), padding.top, toX(len - 1) - toX(ablationStart), 2);
+      // Label
+      ctx.fillStyle = '#ef4444';
+      ctx.font = '9px "JetBrains Mono", "Fira Code", monospace';
+      ctx.textAlign = 'center';
+      const midX = (toX(ablationStart) + toX(len - 1)) / 2;
+      ctx.fillText('ablation', midX, padding.top + 14);
+    }
+
     // ---- Reward line (left Y-axis) ----
     const rewardVals = this.smoothedRewards;
     const minR = Math.min(...rewardVals, 0);
@@ -96,13 +129,21 @@ export class RewardChart {
       ctx.setLineDash([]);
     }
 
-    // Raw reward dots
+    // Raw reward dots (color by step count — longer survival = greener)
+    const maxSteps = Math.max(...this.steps, 1);
     for (let i = 0; i < this.rewards.length; i++) {
       const x = toX(i);
       const y = toYReward(this.rewards[i]);
+      const stepFrac = this.steps[i] / maxSteps;
       ctx.beginPath();
       ctx.arc(x, Math.max(padding.top, Math.min(padding.top + plotH, y)), 1, 0, Math.PI * 2);
-      ctx.fillStyle = this.survivals[i] ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+      if (this.ablated[i]) {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+      } else {
+        ctx.fillStyle = stepFrac > 0.5
+          ? `rgba(34, 197, 94, ${0.08 + stepFrac * 0.15})`
+          : `rgba(239, 68, 68, ${0.08 + (1 - stepFrac) * 0.1})`;
+      }
       ctx.fill();
     }
 
@@ -114,12 +155,13 @@ export class RewardChart {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // ---- Survival rate line (right Y-axis, 0-100%) ----
+    // ---- Steps/ep line (right Y-axis, scaled) ----
+    const maxS = Math.max(...this.smoothedSteps, 1);
     const toYPct = (v: number) => padding.top + plotH - v * plotH;
 
     ctx.beginPath();
-    ctx.moveTo(toX(0), toYPct(this.smoothedSurvival[0]));
-    for (let i = 1; i < len; i++) ctx.lineTo(toX(i), toYPct(this.smoothedSurvival[i]));
+    ctx.moveTo(toX(0), toYPct(this.smoothedSteps[0] / maxS));
+    for (let i = 1; i < len; i++) ctx.lineTo(toX(i), toYPct(this.smoothedSteps[i] / maxS));
     ctx.strokeStyle = '#22c55e';
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -142,12 +184,12 @@ export class RewardChart {
     ctx.fillText(maxR.toFixed(0), padding.left - 4, padding.top + 4);
     ctx.fillText(minR.toFixed(0), padding.left - 4, padding.top + plotH);
 
-    // ---- Right Y-axis labels (survival %) ----
+    // ---- Right Y-axis labels (steps) ----
     const rightX = padding.left + plotW + 4;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#22c55e';
-    ctx.fillText('100%', rightX, padding.top + 4);
-    ctx.fillText('0%', rightX, padding.top + plotH);
+    ctx.fillText(`${maxS.toFixed(0)}`, rightX, padding.top + 4);
+    ctx.fillText('0', rightX, padding.top + plotH);
 
     // ---- Legend ----
     const legendY = 10;
@@ -155,16 +197,16 @@ export class RewardChart {
     ctx.textAlign = 'left';
 
     const lastReward = rewardVals[len - 1];
-    const lastSurvival = this.smoothedSurvival[len - 1];
+    const lastSteps = this.smoothedSteps[len - 1];
     const lastKills = this.smoothedKills[len - 1];
 
     // Reward
     ctx.fillStyle = '#f97316';
     ctx.fillText(`reward: ${lastReward.toFixed(1)}`, padding.left + 4, legendY);
 
-    // Survival
+    // Steps
     ctx.fillStyle = '#22c55e';
-    ctx.fillText(`survival: ${(lastSurvival * 100).toFixed(0)}%`, padding.left + 120, legendY);
+    ctx.fillText(`steps/ep: ${lastSteps.toFixed(0)}`, padding.left + 120, legendY);
 
     // Kills
     ctx.fillStyle = '#3b82f6';

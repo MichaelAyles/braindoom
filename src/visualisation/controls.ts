@@ -150,9 +150,9 @@ export class Controls {
         this.state.snapshotRequest = ep;
         this.state.playing = true;
         this.playBtn.textContent = 'pause';
-        // Set to slowest speed for replay
-        this.speedSelect.value = '0';
-        this.state.speed = SPEEDS[0].value;
+        // Set to slow speed for replay (0.5x)
+        this.speedSelect.value = '2';
+        this.state.speed = SPEEDS[2].value;
         this.highlightSnapshotBtn(ep);
         this.onChange(this.state);
       });

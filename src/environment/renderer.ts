@@ -2,7 +2,7 @@ import { State, ThemeMode } from './types';
 
 const ARENA_RADIUS = 200;
 const FOV = Math.PI / 2;
-const KILL_ANGLE = Math.PI / 18;
+const KILL_ANGLE = (15 * Math.PI) / 180; // ±15 degrees (matches arena max hit angle)
 
 const THEMES = {
   doom: {
@@ -43,7 +43,7 @@ export class ArenaRenderer {
   private center: number;
   private scale: number;
   private hitFlash = 0;
-  private damageFlash = 0;
+  private shootFlash = 0;
   theme: ThemeMode = 'doom';
 
   constructor(canvas: HTMLCanvasElement) {
@@ -64,27 +64,22 @@ export class ArenaRenderer {
     this.hitFlash = 1;
   }
 
-  triggerDamageFlash(): void {
-    this.damageFlash = 1;
-  }
 
   render(state: State, episode = 0): void {
     const ctx = this.ctx;
     const { size, center } = this;
     const t = THEMES[this.theme];
 
-    // Flash on hit/damage
+    // Flash on hit/shoot
     if (state.lastHit) this.hitFlash = 1;
-    if (state.lastDamaged) this.damageFlash = Math.max(this.damageFlash, 0.5);
+    if (state.lastShot) this.shootFlash = 1;
 
-    // Background
+    // Background — only flash on successful hit, not passive damage
     let bg = '#0a0a0a';
     if (this.hitFlash > 0.3) bg = t.hitFlash;
-    if (this.damageFlash > 0.3) bg = t.damageFlash;
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size, size);
     this.hitFlash *= 0.85;
-    this.damageFlash *= 0.85;
 
     // Arena border
     ctx.beginPath();
@@ -153,6 +148,32 @@ export class ArenaRenderer {
     ctx.fillStyle = t.agent;
     ctx.fill();
 
+    // Shoot/spray flash — tracer line from agent in facing direction
+    if (this.shootFlash > 0.1) {
+      const tracerLen = fovLen * 1.2;
+      const tracerColor = this.theme === 'flower'
+        ? `rgba(59, 130, 246, ${this.shootFlash * 0.7})`  // blue for watering
+        : `rgba(239, 68, 68, ${this.shootFlash * 0.7})`;  // red for shooting
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(
+        ax + Math.cos(-state.agentAngle) * tracerLen,
+        ay + Math.sin(-state.agentAngle) * tracerLen
+      );
+      ctx.strokeStyle = tracerColor;
+      ctx.lineWidth = 2 + this.shootFlash * 2;
+      ctx.stroke();
+
+      // Muzzle burst at agent
+      ctx.beginPath();
+      ctx.arc(ax, ay, 8 + this.shootFlash * 4, 0, Math.PI * 2);
+      ctx.fillStyle = this.theme === 'flower'
+        ? `rgba(59, 130, 246, ${this.shootFlash * 0.3})`
+        : `rgba(239, 68, 68, ${this.shootFlash * 0.3})`;
+      ctx.fill();
+    }
+    this.shootFlash *= 0.75;
+
     // Enemy / flower
     if (state.enemyAlive) {
       const [ex, ey] = this.toScreen(state.enemyX, state.enemyY);
@@ -171,17 +192,33 @@ export class ArenaRenderer {
         ctx.fillStyle = t.enemyGlow;
         ctx.fill();
       }
+
+      // Enemy HP pips
+      const maxHP = 3;
+      const pipW = 4;
+      const pipH = 3;
+      const pipGap = 2;
+      const totalW = maxHP * pipW + (maxHP - 1) * pipGap;
+      const startX = ex - totalW / 2;
+      const pipY = ey - 16;
+      for (let i = 0; i < maxHP; i++) {
+        const px = startX + i * (pipW + pipGap);
+        ctx.fillStyle = i < state.enemyHP ? t.enemy : '#333';
+        ctx.fillRect(px, pipY, pipW, pipH);
+      }
     }
 
-    // HP bar
+    // HP bar (scales to max of 100 or current HP)
     const hpBarWidth = 60;
     const hpBarHeight = 4;
     const hpX = size - hpBarWidth - 10;
     const hpY = 12;
-    const hpFrac = Math.max(0, state.agentHP / 100);
+    const hpMax = Math.max(100, state.agentHP);
+    const hpFrac = Math.max(0, state.agentHP / hpMax);
+    const hpPct = state.agentHP / 100; // for color thresholds
     ctx.fillStyle = '#222';
     ctx.fillRect(hpX, hpY, hpBarWidth, hpBarHeight);
-    ctx.fillStyle = hpFrac > 0.5 ? '#22c55e' : hpFrac > 0.25 ? '#f59e0b' : '#ef4444';
+    ctx.fillStyle = hpPct > 1 ? '#06b6d4' : hpPct > 0.5 ? '#22c55e' : hpPct > 0.25 ? '#f59e0b' : '#ef4444';
     ctx.fillRect(hpX, hpY, hpBarWidth * hpFrac, hpBarHeight);
 
     // HUD

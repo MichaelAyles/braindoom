@@ -11,7 +11,6 @@ import { Annotations } from './narration/annotations';
 import { TrainingLog } from './visualisation/training-log';
 import { sampleFromDistribution } from './utils/math';
 import { SeededRNG } from './utils/random';
-
 // Config
 const NET_CONFIG = { inputSize: 3, hiddenSize: 16, outputSize: 4 };
 const SNAPSHOT_EPISODES = [1, 10, 50, 100, 500, 1000, 5000, 10000];
@@ -28,7 +27,7 @@ interface Snapshot {
 // ---- State ----
 let arena = new Arena(42);
 let network = new Network(NET_CONFIG, 123);
-const trainer = new Trainer(0.01, 0.99, 0.03, 32);
+const trainer = new Trainer(0.023, 0.959, 0.019, 11, 0.2, 1, 0.001, 0.993);
 let rng = new SeededRNG(999);
 let episode = 0;
 let totalKills = 0;
@@ -284,13 +283,17 @@ function init(): void {
 
     if (result.done) {
       // Episode finished
-      if (!replayMode && !ablation) {
-        trainer.addTrajectory(network, currentTrajectory!);
-        netViz.recordWeights(network);
+      if (!replayMode) {
+        // Only train when not ablating
+        if (!ablation) {
+          trainer.addTrajectory(network, currentTrajectory!);
+          netViz.recordWeights(network);
+        }
+
         episode++;
         const epKills = activeArena.state.killCount;
         totalKills += epKills;
-        rewardChart.push(episodeReward, !result.killed, epKills);
+        rewardChart.push(episodeReward, activeArena.state.step, epKills, ablation);
 
         const avgReward = rewardChart.getLastSmoothed();
         const killRate = episode > 0 ? totalKills / episode : 0;
@@ -331,7 +334,7 @@ function init(): void {
         }
 
         // Save snapshot at milestones
-        if (SNAPSHOT_EPISODES.includes(episode)) {
+        if (!ablation && SNAPSHOT_EPISODES.includes(episode)) {
           saveSnapshot(episode, network);
           controls.updateSnapshots([...snapshots.keys()].sort((a, b) => a - b));
         }

@@ -1,5 +1,5 @@
 import { NetworkConfig } from './types';
-import { tanh, softmax } from '../utils/math';
+import { tanh, softmaxFloored } from '../utils/math';
 import { SeededRNG } from '../utils/random';
 
 export class Network {
@@ -58,13 +58,20 @@ export class Network {
       logits[k] = sum;
     }
 
-    this.lastOutput = softmax(logits);
+    this.lastOutput = softmaxFloored(logits);
     return this.lastOutput;
   }
 
   paramCount(): number {
     const { inputSize, hiddenSize, outputSize } = this.config;
     return (inputSize * hiddenSize + hiddenSize) + (hiddenSize * outputSize + outputSize);
+  }
+
+  loadWeights(data: { weightsIH: number[][]; biasH: number[]; weightsHO: number[][]; biasO: number[] }): void {
+    this.weightsIH = data.weightsIH.map(row => [...row]);
+    this.biasH = [...data.biasH];
+    this.weightsHO = data.weightsHO.map(row => [...row]);
+    this.biasO = [...data.biasO];
   }
 
   // Get flat array of all weights for visualization

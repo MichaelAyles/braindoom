@@ -12,6 +12,15 @@ export function softmax(logits: number[]): number[] {
   return exps.map((e) => e / sum);
 }
 
+// Softmax with minimum probability floor — prevents any action from reaching 0
+const ACTION_FLOOR = 0.10;
+export function softmaxFloored(logits: number[]): number[] {
+  const raw = softmax(logits);
+  const n = raw.length;
+  const totalFloor = ACTION_FLOOR * n;
+  return raw.map(p => ACTION_FLOOR + (1 - totalFloor) * p);
+}
+
 export function sampleFromDistribution(probs: number[], rand: number): number {
   let cumulative = 0;
   for (let i = 0; i < probs.length; i++) {
