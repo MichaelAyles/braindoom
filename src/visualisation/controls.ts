@@ -5,26 +5,36 @@ export interface ControlState {
   speed: number;
   ablation: boolean;
   theme: ThemeMode;
-  snapshotRequest: number | null; // episode number to replay, or null
+  snapshotRequest: number | null;
 }
 
 export type ControlCallback = (state: ControlState) => void;
 
-const SPEEDS = [0.01, 0.1, 0.5, 1, 5, 20, 100];
+const SPEEDS: { label: string; value: number }[] = [
+  { label: '0.02x', value: 0.02 },
+  { label: '0.1x',  value: 0.1 },
+  { label: '0.5x',  value: 0.5 },
+  { label: '1x',    value: 1 },
+  { label: '2x',    value: 2 },
+  { label: '5x',    value: 5 },
+  { label: '10x',   value: 10 },
+  { label: '50x',   value: 50 },
+  { label: 'max',   value: 200 },
+];
+const DEFAULT_SPEED_INDEX = 3; // 1x (which is the old 0.5x)
 
 export class Controls {
   state: ControlState = {
     playing: true,
-    speed: 1,
+    speed: SPEEDS[DEFAULT_SPEED_INDEX].value,
     ablation: false,
     theme: 'doom',
     snapshotRequest: null,
   };
   private container: HTMLElement;
   private onChange: ControlCallback;
-  private speedIndex = 3; // starts at 1x
   private playBtn!: HTMLButtonElement;
-  private speedBtn!: HTMLButtonElement;
+  private speedSelect!: HTMLSelectElement;
   private ablationBtn!: HTMLButtonElement;
   private themeBtn!: HTMLButtonElement;
   private snapshotBar!: HTMLElement;
@@ -58,12 +68,27 @@ export class Controls {
       this.onChange(this.state);
     });
 
-    this.speedBtn = this.makeBtn('speed: 1x', () => {
-      this.speedIndex = (this.speedIndex + 1) % SPEEDS.length;
-      this.state.speed = SPEEDS[this.speedIndex];
-      this.speedBtn.textContent = `speed: ${this.state.speed}x`;
+    // Speed dropdown
+    this.speedSelect = document.createElement('select');
+    this.speedSelect.style.cssText = `
+      background: transparent; border: 1px solid #333; color: #999;
+      padding: 4px 8px; font-family: inherit; font-size: 11px;
+      cursor: pointer; border-radius: 3px;
+      appearance: auto; -webkit-appearance: auto;
+    `;
+    for (let i = 0; i < SPEEDS.length; i++) {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = SPEEDS[i].label;
+      opt.style.cssText = 'background: #1a1a1a; color: #ccc;';
+      if (i === DEFAULT_SPEED_INDEX) opt.selected = true;
+      this.speedSelect.appendChild(opt);
+    }
+    this.speedSelect.onchange = () => {
+      const idx = Number(this.speedSelect.value);
+      this.state.speed = SPEEDS[idx].value;
       this.onChange(this.state);
-    });
+    };
 
     this.ablationBtn = this.makeBtn('ablate: off', () => {
       this.state.ablation = !this.state.ablation;
@@ -85,7 +110,7 @@ export class Controls {
       this.container.dispatchEvent(new CustomEvent('reset'));
     });
 
-    row.append(this.playBtn, this.speedBtn, this.ablationBtn, this.themeBtn, resetBtn);
+    row.append(this.playBtn, this.speedSelect, this.ablationBtn, this.themeBtn, resetBtn);
 
     // Snapshot replay bar
     this.snapshotBar = document.createElement('div');
@@ -107,7 +132,6 @@ export class Controls {
     label.style.cssText = 'font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.05em;';
     this.snapshotBar.appendChild(label);
 
-    // "live" button to return to training
     const liveBtn = this.makeBtn('live', () => {
       this.state.snapshotRequest = null;
       this.highlightSnapshotBtn(null);
@@ -122,10 +146,9 @@ export class Controls {
         this.state.snapshotRequest = ep;
         this.state.playing = true;
         this.playBtn.textContent = 'pause';
-        // Set slow speed for replay
-        this.speedIndex = 0;
-        this.state.speed = SPEEDS[0];
-        this.speedBtn.textContent = `speed: ${this.state.speed}x`;
+        // Set to slowest speed for replay
+        this.speedSelect.value = '0';
+        this.state.speed = SPEEDS[0].value;
         this.highlightSnapshotBtn(ep);
         this.onChange(this.state);
       });

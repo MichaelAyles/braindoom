@@ -66,7 +66,7 @@ export class ArenaRenderer {
     this.damageFlash = 1;
   }
 
-  render(state: State): void {
+  render(state: State, episode = 0): void {
     const ctx = this.ctx;
     const { size, center } = this;
     const t = THEMES[this.theme];
@@ -186,8 +186,10 @@ export class ArenaRenderer {
     ctx.fillStyle = '#666';
     ctx.font = '11px "JetBrains Mono", "Fira Code", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`${t.killLabel}: ${state.killCount}`, 8, 16);
-    ctx.fillText(`step: ${state.step}`, 8, 30);
+    ctx.fillText(`episode: ${episode}`, 8, 16);
+    ctx.fillText(`${t.killLabel}: ${state.killCount}`, 8, 30);
+    ctx.fillText(`step: ${state.step}`, 8, 44);
+    ctx.fillText(`ammo: ${state.agentAmmo}`, 8, 58);
     ctx.textAlign = 'right';
     ctx.fillText(`${t.hpLabel}: ${Math.max(0, Math.round(state.agentHP))}`, size - 8, 28);
   }

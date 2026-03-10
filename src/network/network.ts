@@ -21,10 +21,9 @@ export class Network {
     this.config = config;
     const rng = new SeededRNG(seed);
 
-    // Small init: keeps initial policy near-uniform so entropy bonus can guide exploration
-    // before the network commits to a direction
-    const scaleIH = 0.1;
-    const scaleHO = 0.01;
+    // Xavier init
+    const scaleIH = Math.sqrt(2 / (config.inputSize + config.hiddenSize));
+    const scaleHO = Math.sqrt(2 / (config.hiddenSize + config.outputSize));
 
     this.weightsIH = Array.from({ length: config.hiddenSize }, () =>
       Array.from({ length: config.inputSize }, () => rng.uniform(-scaleIH, scaleIH))

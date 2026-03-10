@@ -2,9 +2,15 @@ export class RewardChart {
   private ctx: CanvasRenderingContext2D;
   private width: number;
   private height: number;
+
   private rewards: number[] = [];
-  private smoothed: number[] = [];
-  private windowSize = 10;
+  private smoothedRewards: number[] = [];
+  private survivals: boolean[] = []; // true = survived, false = died
+  private smoothedSurvival: number[] = [];
+  private kills: number[] = []; // kills per episode
+  private smoothedKills: number[] = [];
+
+  private windowSize = 20;
 
   constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -12,34 +18,48 @@ export class RewardChart {
     this.height = canvas.height;
   }
 
-  push(episodeReward: number): void {
+  push(episodeReward: number, survived: boolean, killCount: number): void {
     this.rewards.push(episodeReward);
+    this.survivals.push(survived);
+    this.kills.push(killCount);
 
-    // Rolling average
     const start = Math.max(0, this.rewards.length - this.windowSize);
-    const window = this.rewards.slice(start);
-    const avg = window.reduce((a, b) => a + b, 0) / window.length;
-    this.smoothed.push(avg);
+
+    // Smoothed reward
+    const rewardWindow = this.rewards.slice(start);
+    this.smoothedRewards.push(rewardWindow.reduce((a, b) => a + b, 0) / rewardWindow.length);
+
+    // Smoothed survival rate
+    const survWindow = this.survivals.slice(start);
+    this.smoothedSurvival.push(survWindow.filter(s => s).length / survWindow.length);
+
+    // Smoothed kills per episode
+    const killWindow = this.kills.slice(start);
+    this.smoothedKills.push(killWindow.reduce((a, b) => a + b, 0) / killWindow.length);
   }
 
   getLastSmoothed(): number {
-    return this.smoothed[this.smoothed.length - 1] ?? 0;
+    return this.smoothedRewards[this.smoothedRewards.length - 1] ?? 0;
   }
 
   reset(): void {
     this.rewards = [];
-    this.smoothed = [];
+    this.smoothedRewards = [];
+    this.survivals = [];
+    this.smoothedSurvival = [];
+    this.kills = [];
+    this.smoothedKills = [];
   }
 
   render(): void {
     const ctx = this.ctx;
     const { width, height } = this;
-    const padding = { top: 20, right: 16, bottom: 24, left: 48 };
+    const padding = { top: 16, right: 80, bottom: 24, left: 48 };
 
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, width, height);
 
-    if (this.smoothed.length < 2) {
+    if (this.smoothedRewards.length < 2) {
       ctx.fillStyle = '#444';
       ctx.font = '11px "JetBrains Mono", "Fira Code", monospace';
       ctx.textAlign = 'center';
@@ -49,61 +69,107 @@ export class RewardChart {
 
     const plotW = width - padding.left - padding.right;
     const plotH = height - padding.top - padding.bottom;
+    const len = this.smoothedRewards.length;
 
-    const allVals = this.smoothed;
-    const minVal = Math.min(...allVals, 0);
-    const maxVal = Math.max(...allVals, 1);
-    const range = maxVal - minVal || 1;
+    const toX = (i: number) => padding.left + (i / (len - 1)) * plotW;
 
-    const toX = (i: number) => padding.left + (i / (allVals.length - 1)) * plotW;
-    const toY = (v: number) => padding.top + plotH - ((v - minVal) / range) * plotH;
+    // ---- Reward line (left Y-axis) ----
+    const rewardVals = this.smoothedRewards;
+    const minR = Math.min(...rewardVals, 0);
+    const maxR = Math.max(...rewardVals, 1);
+    const rangeR = maxR - minR || 1;
+    const toYReward = (v: number) => padding.top + plotH - ((v - minR) / rangeR) * plotH;
 
     // Zero line
-    if (minVal < 0 && maxVal > 0) {
-      const zeroY = toY(0);
+    if (minR < 0 && maxR > 0) {
+      const zeroY = toYReward(0);
       ctx.beginPath();
       ctx.moveTo(padding.left, zeroY);
-      ctx.lineTo(width - padding.right, zeroY);
-      ctx.strokeStyle = '#333';
+      ctx.lineTo(padding.left + plotW, zeroY);
+      ctx.strokeStyle = '#222';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Raw rewards (dots)
+    // Raw reward dots
     for (let i = 0; i < this.rewards.length; i++) {
       const x = toX(i);
-      const y = toY(this.rewards[i]);
+      const y = toYReward(this.rewards[i]);
       ctx.beginPath();
-      ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.arc(x, Math.max(padding.top, Math.min(padding.top + plotH, y)), 1, 0, Math.PI * 2);
+      ctx.fillStyle = this.survivals[i] ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)';
       ctx.fill();
     }
 
-    // Smoothed line
+    // Smoothed reward
     ctx.beginPath();
-    ctx.moveTo(toX(0), toY(allVals[0]));
-    for (let i = 1; i < allVals.length; i++) {
-      ctx.lineTo(toX(i), toY(allVals[i]));
-    }
+    ctx.moveTo(toX(0), toYReward(rewardVals[0]));
+    for (let i = 1; i < len; i++) ctx.lineTo(toX(i), toYReward(rewardVals[i]));
     ctx.strokeStyle = '#f97316';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Axes labels
-    ctx.fillStyle = '#555';
-    ctx.font = '10px "JetBrains Mono", "Fira Code", monospace';
+    // ---- Survival rate line (right Y-axis, 0-100%) ----
+    const toYPct = (v: number) => padding.top + plotH - v * plotH;
+
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toYPct(this.smoothedSurvival[0]));
+    for (let i = 1; i < len; i++) ctx.lineTo(toX(i), toYPct(this.smoothedSurvival[i]));
+    ctx.strokeStyle = '#22c55e';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // ---- Kills/ep line (right Y-axis, scaled) ----
+    const maxK = Math.max(...this.smoothedKills, 1);
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toYPct(this.smoothedKills[0] / maxK));
+    for (let i = 1; i < len; i++) ctx.lineTo(toX(i), toYPct(this.smoothedKills[i] / maxK));
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // ---- Left Y-axis labels (reward) ----
+    ctx.fillStyle = '#f97316';
+    ctx.font = '9px "JetBrains Mono", "Fira Code", monospace';
     ctx.textAlign = 'right';
-    ctx.fillText(maxVal.toFixed(1), padding.left - 4, padding.top + 4);
-    ctx.fillText(minVal.toFixed(1), padding.left - 4, padding.top + plotH);
+    ctx.fillText(maxR.toFixed(0), padding.left - 4, padding.top + 4);
+    ctx.fillText(minR.toFixed(0), padding.left - 4, padding.top + plotH);
 
-    ctx.textAlign = 'center';
-    ctx.fillText('episode', width / 2, height - 4);
-
-    // Title
+    // ---- Right Y-axis labels (survival %) ----
+    const rightX = padding.left + plotW + 4;
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#666';
-    ctx.fillText('reward (10-ep avg)', padding.left, 12);
+    ctx.fillStyle = '#22c55e';
+    ctx.fillText('100%', rightX, padding.top + 4);
+    ctx.fillText('0%', rightX, padding.top + plotH);
+
+    // ---- Legend ----
+    const legendY = 10;
+    ctx.font = '9px "JetBrains Mono", "Fira Code", monospace';
+    ctx.textAlign = 'left';
+
+    const lastReward = rewardVals[len - 1];
+    const lastSurvival = this.smoothedSurvival[len - 1];
+    const lastKills = this.smoothedKills[len - 1];
+
+    // Reward
+    ctx.fillStyle = '#f97316';
+    ctx.fillText(`reward: ${lastReward.toFixed(1)}`, padding.left + 4, legendY);
+
+    // Survival
+    ctx.fillStyle = '#22c55e';
+    ctx.fillText(`survival: ${(lastSurvival * 100).toFixed(0)}%`, padding.left + 120, legendY);
+
+    // Kills
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillText(`kills/ep: ${lastKills.toFixed(1)}`, padding.left + 250, legendY);
+
+    // X-axis
+    ctx.fillStyle = '#444';
+    ctx.textAlign = 'center';
+    ctx.fillText(`episode (${len})`, width / 2, height - 4);
   }
 }

@@ -3,6 +3,7 @@ export interface State {
   agentY: number;
   agentAngle: number; // radians, 0 = right, CCW positive
   agentHP: number;    // 0-100, dies at 0
+  agentAmmo: number;  // shots remaining
   enemyX: number;
   enemyY: number;
   enemyAlive: boolean;
@@ -14,10 +15,9 @@ export interface State {
 }
 
 export interface Observation {
-  enemyAngleSin: number;  // sin(relative angle), [-1, 1], positive = left
-  enemyAngleCos: number;  // cos(relative angle), [-1, 1], 1 = dead ahead
-  enemyDistance: number;   // [0, 1] normalised distance
-  enemyVisible: number;    // 0 or 1
+  enemyAngle: number;    // [-1, 1] normalised relative angle. -1 = hard left, +1 = hard right, 0 = dead centre
+  enemyDistance: number;  // [0, 1] normalised distance
+  enemyVisible: number;   // 0 or 1
 }
 
 export enum Action {

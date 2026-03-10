@@ -8,11 +8,12 @@ import { NetworkViz } from './visualisation/network-viz';
 import { RewardChart } from './visualisation/reward-chart';
 import { Controls } from './visualisation/controls';
 import { Annotations } from './narration/annotations';
+import { TrainingLog } from './visualisation/training-log';
 import { sampleFromDistribution } from './utils/math';
 import { SeededRNG } from './utils/random';
 
 // Config
-const NET_CONFIG = { inputSize: 4, hiddenSize: 16, outputSize: 4 };
+const NET_CONFIG = { inputSize: 3, hiddenSize: 16, outputSize: 4 };
 const SNAPSHOT_EPISODES = [1, 10, 50, 100, 500, 1000, 5000, 10000];
 
 // Types
@@ -27,7 +28,7 @@ interface Snapshot {
 // ---- State ----
 let arena = new Arena(42);
 let network = new Network(NET_CONFIG, 123);
-const trainer = new Trainer(0.01, 0.99);
+const trainer = new Trainer(0.01, 0.99, 0.03, 32);
 let rng = new SeededRNG(999);
 let episode = 0;
 let totalKills = 0;
@@ -42,6 +43,15 @@ let currentTrajectory: Trajectory | null = null;
 let episodeReward = 0;
 let episodeActive = false;
 let stepAccumulator = 0; // fractional step counter for slow speeds
+
+// Per-episode peak tracking
+let peakHP = 0;
+let peakAmmo = 0;
+
+// Rolling history for diagnostics (last 50 episodes)
+const recentPeakHP: number[] = [];
+const recentPeakAmmo: number[] = [];
+const recentSteps: number[] = [];
 
 // Snapshots
 const snapshots: Map<number, Snapshot> = new Map();
@@ -71,7 +81,7 @@ function loadSnapshot(snap: Snapshot): Network {
 }
 
 function obsToArray(obs: Observation): number[] {
-  return [obs.enemyAngleSin, obs.enemyAngleCos, obs.enemyDistance, obs.enemyVisible];
+  return [obs.enemyAngle, obs.enemyDistance, obs.enemyVisible];
 }
 
 // ---- DOM Setup ----
@@ -100,7 +110,7 @@ function init(): void {
   const title = document.createElement('div');
   title.innerHTML = `
     <h1 style="font-size: 18px; font-weight: 700; color: #f5f5f5; margin: 0 0 4px 0;">
-      148 parameters vs 200,000 neurons
+      132 parameters vs 200,000 neurons
     </h1>
     <p style="font-size: 12px; color: #666; margin: 0 0 20px 0;">
       A tiny neural network learns the same behaviour as the Cortical Labs CL1 DOOM demo. In your browser. In seconds.
@@ -147,11 +157,16 @@ function init(): void {
   annotDiv.style.cssText = 'margin-top: 12px;';
   app.appendChild(annotDiv);
 
+  // Log table
+  const logDiv = document.createElement('div');
+  app.appendChild(logDiv);
+
   // Renderers
   const arenaRenderer = new ArenaRenderer(arenaCanvas);
   const netViz = new NetworkViz(netCanvas);
   const rewardChart = new RewardChart(chartCanvas);
   const annotations = new Annotations(annotDiv);
+  const trainingLog = new TrainingLog(logDiv);
 
   const controls = new Controls(controlsDiv, (state) => {
     playing = state.playing;
@@ -200,9 +215,16 @@ function init(): void {
     replayMode = false;
     replayNetwork = null;
     replayArena = null;
+    peakHP = 0;
+    peakAmmo = 0;
+    recentPeakHP.length = 0;
+    recentPeakAmmo.length = 0;
+    recentSteps.length = 0;
     snapshots.clear();
     rewardChart.reset();
+    netViz.resetHistory();
     annotations.reset();
+    trainingLog.reset();
     controls.state.ablation = false;
     controls.state.snapshotRequest = null;
     controls.updateSnapshots([]);
@@ -222,8 +244,14 @@ function init(): void {
       currentObs = activeArena.reset();
       currentTrajectory = { states: [], actions: [], rewards: [], logProbs: [] };
       episodeReward = 0;
+      peakHP = activeArena.state.agentHP;
+      peakAmmo = activeArena.state.agentAmmo;
       episodeActive = true;
     }
+
+    // Track peaks during episode
+    peakHP = Math.max(peakHP, activeArena.state.agentHP);
+    peakAmmo = Math.max(peakAmmo, activeArena.state.agentAmmo);
 
     // Forward pass
     const input = obsToArray(currentObs!);
@@ -248,14 +276,50 @@ function init(): void {
     if (result.done) {
       // Episode finished
       if (!replayMode && !ablation) {
-        trainer.update(network, currentTrajectory!);
+        trainer.addTrajectory(network, currentTrajectory!);
+        netViz.recordWeights(network);
         episode++;
-        totalKills += activeArena.state.killCount;
-        rewardChart.push(episodeReward);
+        const epKills = activeArena.state.killCount;
+        totalKills += epKills;
+        rewardChart.push(episodeReward, !result.killed, epKills);
 
         const avgReward = rewardChart.getLastSmoothed();
         const killRate = episode > 0 ? totalKills / episode : 0;
         annotations.update(episode, avgReward, killRate);
+
+        // Track rolling stats
+        recentPeakHP.push(peakHP);
+        recentPeakAmmo.push(peakAmmo);
+        recentSteps.push(activeArena.state.step);
+        if (recentPeakHP.length > 50) recentPeakHP.shift();
+        if (recentPeakAmmo.length > 50) recentPeakAmmo.shift();
+        if (recentSteps.length > 50) recentSteps.shift();
+
+        // Diagnostics every 50 episodes
+        if (episode % 50 === 0) {
+          const traj = currentTrajectory!;
+          const actionCounts = [0, 0, 0, 0];
+          for (const a of traj.actions) actionCounts[a]++;
+          const pct = actionCounts.map(c => Math.round((c / traj.actions.length) * 100));
+          const avgPeakHP = recentPeakHP.reduce((a, b) => a + b, 0) / recentPeakHP.length;
+          const avgPeakAmmo = recentPeakAmmo.reduce((a, b) => a + b, 0) / recentPeakAmmo.length;
+          const avgSteps = recentSteps.reduce((a, b) => a + b, 0) / recentSteps.length;
+
+          trainingLog.push({
+            episode,
+            reward: episodeReward,
+            kills: epKills,
+            steps: activeArena.state.step,
+            avgPeakHP,
+            avgPeakAmmo,
+            avgSteps,
+            actionsL: pct[0],
+            actionsR: pct[1],
+            actionsS: pct[2],
+            actionsF: pct[3],
+            probs: [...network.lastOutput],
+          });
+        }
 
         // Save snapshot at milestones
         if (SNAPSHOT_EPISODES.includes(episode)) {
@@ -278,7 +342,7 @@ function init(): void {
 
   // ---- Render loop ----
   let lastTime = 0;
-  const BASE_STEP_INTERVAL = 50; // ms per step at 1x speed
+  const BASE_STEP_INTERVAL = 100; // ms per step at 1x speed
 
   function frame(timestamp: number): void {
     if (lastTime === 0) lastTime = timestamp;
@@ -307,7 +371,7 @@ function init(): void {
     const activeArena = replayMode ? replayArena! : arena;
     const activeNetwork = replayMode ? replayNetwork! : network;
 
-    arenaRenderer.render(activeArena.state);
+    arenaRenderer.render(activeArena.state, episode);
     netViz.render(activeNetwork);
     rewardChart.render();
 

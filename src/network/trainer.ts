@@ -6,37 +6,71 @@ export class Trainer {
   private lr: number;
   private gamma: number;
   private entropyCoef: number;
+  private batch: Trajectory[] = [];
+  private batchSize: number;
 
-  constructor(lr = 0.01, gamma = 0.99, entropyCoef = 0.05) {
+  constructor(lr = 0.01, gamma = 0.99, entropyCoef = 0.03, batchSize = 8) {
     this.lr = lr;
     this.gamma = gamma;
     this.entropyCoef = entropyCoef;
+    this.batchSize = batchSize;
   }
 
-  update(network: Network, trajectory: Trajectory): number {
-    const { states, actions, rewards } = trajectory;
-    const T = rewards.length;
-    if (T === 0) return 0;
+  // Queue a trajectory. Returns true if batch is full and weights were updated.
+  addTrajectory(network: Network, trajectory: Trajectory): boolean {
+    this.batch.push(trajectory);
+    if (this.batch.length >= this.batchSize) {
+      this.updateBatch(network);
+      this.batch = [];
+      return true;
+    }
+    return false;
+  }
 
-    // Compute discounted returns
-    const returns = new Array(T);
-    let G = 0;
-    for (let t = T - 1; t >= 0; t--) {
-      G = rewards[t] + this.gamma * G;
-      returns[t] = G;
+  private updateBatch(network: Network): void {
+    // Collect all timesteps from all episodes in the batch
+    const allStates: number[][] = [];
+    const allActions: number[] = [];
+    const allAdvantages: number[] = [];
+
+    for (const traj of this.batch) {
+      const T = traj.rewards.length;
+      if (T === 0) continue;
+
+      // Compute discounted returns for this episode
+      const returns = new Array(T);
+      let G = 0;
+      for (let t = T - 1; t >= 0; t--) {
+        G = traj.rewards[t] + this.gamma * G;
+        returns[t] = G;
+      }
+
+      for (let t = 0; t < T; t++) {
+        allStates.push(traj.states[t]);
+        allActions.push(traj.actions[t]);
+        allAdvantages.push(returns[t]);
+      }
     }
 
-    // Baseline subtraction (mean return)
-    const meanReturn = returns.reduce((a: number, b: number) => a + b, 0) / T;
-    const advantages = returns.map((r: number) => r - meanReturn);
+    if (allAdvantages.length === 0) return;
 
-    // REINFORCE: for each timestep, nudge weights to increase prob of good actions
-    for (let t = 0; t < T; t++) {
-      const input = states[t];
-      const action = actions[t];
-      const advantage = advantages[t];
+    // Normalise advantages across the whole batch (zero mean, unit variance)
+    const mean = allAdvantages.reduce((a, b) => a + b, 0) / allAdvantages.length;
+    let variance = 0;
+    for (const a of allAdvantages) variance += (a - mean) * (a - mean);
+    variance /= allAdvantages.length;
+    const std = Math.sqrt(variance + 1e-8);
+    for (let i = 0; i < allAdvantages.length; i++) {
+      allAdvantages[i] = (allAdvantages[i] - mean) / std;
+    }
 
-      // Forward pass to get activations
+    // Single gradient step over all timesteps in the batch
+    for (let t = 0; t < allStates.length; t++) {
+      const input = allStates[t];
+      const action = allActions[t];
+      const advantage = allAdvantages[t];
+
+      // Forward pass
       const hidden = new Array(network.config.hiddenSize);
       for (let j = 0; j < network.config.hiddenSize; j++) {
         let sum = network.biasH[j];
@@ -56,22 +90,22 @@ export class Trainer {
       }
       const probs = softmax(logits);
 
-      // Policy gradient: d_logit[k] = (indicator(k == action) - prob[k]) * advantage
-      // Plus entropy bonus: encourages exploration by pushing toward uniform distribution
+      // Policy gradient + entropy bonus
       const dLogits = probs.map((p: number, k: number) => {
         const policyGrad = ((k === action ? 1 : 0) - p) * advantage;
-        // Entropy gradient for softmax: -d/d_logit(sum p*log(p)) = p*(1-p)*log(p) + ...
-        // Simplified: push toward uniform by penalizing confident predictions
         const entropyGrad = -p * (Math.log(p + 1e-10) + 1);
         return policyGrad + this.entropyCoef * entropyGrad;
       });
 
+      // Scale learning rate by batch size so effective LR is consistent
+      const lr = this.lr / this.batch.length;
+
       // Update output weights and biases
       for (let k = 0; k < network.config.outputSize; k++) {
         for (let j = 0; j < network.config.hiddenSize; j++) {
-          network.weightsHO[k][j] += this.lr * dLogits[k] * hidden[j];
+          network.weightsHO[k][j] += lr * dLogits[k] * hidden[j];
         }
-        network.biasO[k] += this.lr * dLogits[k];
+        network.biasO[k] += lr * dLogits[k];
       }
 
       // Backprop through hidden layer
@@ -80,17 +114,14 @@ export class Trainer {
         for (let k = 0; k < network.config.outputSize; k++) {
           dHidden += dLogits[k] * network.weightsHO[k][j];
         }
-        // tanh derivative: 1 - tanh^2
         const tanhDeriv = 1 - hidden[j] * hidden[j];
         dHidden *= tanhDeriv;
 
         for (let i = 0; i < network.config.inputSize; i++) {
-          network.weightsIH[j][i] += this.lr * dHidden * input[i];
+          network.weightsIH[j][i] += lr * dHidden * input[i];
         }
-        network.biasH[j] += this.lr * dHidden;
+        network.biasH[j] += lr * dHidden;
       }
     }
-
-    return meanReturn;
   }
 }
