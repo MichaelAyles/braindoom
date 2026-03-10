@@ -1,5 +1,7 @@
 # 132 Parameters vs 200,000 Neurons
 
+**[braindoom.mikeayles.com](https://braindoom.mikeayles.com)**
+
 A tiny neural network learns the same behaviour as the Cortical Labs CL1 DOOM demo. In your browser. In seconds.
 
 ## What is this?
@@ -45,3 +47,7 @@ The accompanying blog post lives in `blog/index.mdx` with JSX components in `blo
 npm run build    # outputs to dist/
 npm run preview  # preview production build
 ```
+
+## Deployment
+
+Deployed to GitHub Pages at [braindoom.mikeayles.com](https://braindoom.mikeayles.com) via GitHub Actions on push to main.
