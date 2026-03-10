@@ -11,3 +11,11 @@ src/network/pretrained-weights.json
 train-headless.ts
 train-pretrain.ts
 train-sweep.ts
+train-single.ts
+train-sweep100.ts
+
+# Blog (lives in separate blog repo)
+blog/
+
+# Editor / AI
+CLAUDE.md
