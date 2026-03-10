@@ -1,0 +1,18 @@
+{
+  "name": "braindoom",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.59.0"
+  }
+}
