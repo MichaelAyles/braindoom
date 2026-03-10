@@ -1,3 +1,13 @@
 node_modules
 dist
 *.local
+
+# Training experiment artifacts
+pretrain-log.txt
+pretrain-weights.jsonl
+sweep100-progress.txt
+sweep100-results.jsonl
+src/network/pretrained-weights.json
+train-headless.ts
+train-pretrain.ts
+train-sweep.ts
